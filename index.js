@@ -41,7 +41,7 @@ app.post('/voice', async (req, res) => {
       }
     });
 
-    const introUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
+    const introUrl = "https://drive.google.com/file/d/1-dnzfW9f1oD-WCZRUtf_XzeiW7qabRXj/view?usp=sharing";
 
     if (!introUrl) {
       throw new Error('Kein gültiger Link von file.io erhalten');
