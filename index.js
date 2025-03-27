@@ -42,10 +42,11 @@ app.post('/voice', async (req, res) => {
     });
 
     const introUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
- 
+
     if (!introUrl) {
-  throw new Error('Kein gültiger Link von file.io erhalten');
-}
+      throw new Error('Kein gültiger Link von file.io erhalten');
+    }
+
     console.log("🎧 Intro MP3 Link:", introUrl);
 
     const response = create({
@@ -64,7 +65,7 @@ app.post('/voice', async (req, res) => {
     res.send(response);
 
   } catch (err) {
-    console.error('Fehler beim Intro:', err.message);
+    console.error('❌ Fehler beim Intro:', err.message);
     res.send('<Response><Say>Es gab ein Problem mit dem Sprachmodul.</Say></Response>');
   }
 });
@@ -123,7 +124,13 @@ app.post('/process-recording', async (req, res) => {
       }
     });
 
-    const audioUrl = fileUpload.data.link;
+    const audioUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
+
+    if (!audioUrl) {
+      throw new Error('Kein gültiger Link von file.io erhalten (Antwort)');
+    }
+
+    console.log("🗣️ Antwort MP3 Link:", audioUrl);
 
     const twiml = create({
       Response: {
@@ -136,11 +143,11 @@ app.post('/process-recording', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Fehler im Bot:', err.message);
-    console.log('file.io Upload Response:', fileUpload.data);
     res.send('<Response><Say>Entschuldigung, es gab ein technisches Problem.</Say></Response>');
   }
 });
 
+// ➤ Server starten
 app.listen(PORT, () => {
   console.log(`✅ Lisa Voicebot läuft auf Port ${PORT}`);
 });
