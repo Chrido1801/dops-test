@@ -35,19 +35,19 @@ app.post('/voice', async (req, res) => {
       }
     );
 
-    const fileUpload = await axios.post('https://file.io/?expires=1d', elevenResp.data, {
-      headers: {
-        'Content-Type': 'audio/mpeg'
+    const filename = `lisa-intro-${Date.now()}.mp3`;
+    const uploadResp = await axios.put(
+      `https://temp.sh/${filename}`,
+      elevenResp.data,
+      {
+        headers: {
+          'Content-Type': 'audio/mpeg'
+        }
       }
-    });
+    );
 
-    const introUrl = "https://drive.google.com/file/d/1-dnzfW9f1oD-WCZRUtf_XzeiW7qabRXj/view?usp=sharing";
-
-    if (!introUrl) {
-      throw new Error('Kein gültiger Link von file.io erhalten');
-    }
-
-    console.log("🎧 Intro MP3 Link:", introUrl);
+    const introUrl = uploadResp.config.url;
+    console.log("🎧 Intro MP3 von temp.sh:", introUrl);
 
     const response = create({
       Response: {
@@ -70,38 +70,15 @@ app.post('/voice', async (req, res) => {
   }
 });
 
-// ➤ GPT + ElevenLabs Antwort
+// ➤ Antwort (nur statischer Text für Testzwecke)
 app.post('/process-recording', async (req, res) => {
-  const recordingUrl = req.body.RecordingUrl + '.mp3';
-
   try {
-    const userText = "Ich interessiere mich für Werbung in der Region.";
-
-    const gptResp = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin aus der Steiermark. Antworte charmant und kurz auf Fragen zur Bildschirmwerbung.'
-        },
-        {
-          role: 'user',
-          content: userText
-        }
-      ]
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const gptReply = gptResp.data.choices[0].message.content;
+    const staticReply = 'Das klingt spannend, gerne zeige ich Ihnen das persönlich. Wie wäre es mit einem Termin am Dienstag um 10 Uhr?';
 
     const elevenResp = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
-        text: gptReply,
+        text: staticReply,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
           stability: 0.4,
@@ -118,19 +95,19 @@ app.post('/process-recording', async (req, res) => {
       }
     );
 
-    const fileUpload = await axios.post('https://file.io/?expires=1d', elevenResp.data, {
-      headers: {
-        'Content-Type': 'audio/mpeg'
+    const filename = `lisa-reply-${Date.now()}.mp3`;
+    const uploadResp = await axios.put(
+      `https://temp.sh/${filename}`,
+      elevenResp.data,
+      {
+        headers: {
+          'Content-Type': 'audio/mpeg'
+        }
       }
-    });
+    );
 
-    const audioUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
-
-    if (!audioUrl) {
-      throw new Error('Kein gültiger Link von file.io erhalten (Antwort)');
-    }
-
-    console.log("🗣️ Antwort MP3 Link:", audioUrl);
+    const audioUrl = uploadResp.config.url;
+    console.log("🗣️ Antwort MP3 von temp.sh:", audioUrl);
 
     const twiml = create({
       Response: {
@@ -142,12 +119,11 @@ app.post('/process-recording', async (req, res) => {
     res.send(twiml);
 
   } catch (err) {
-    console.error('❌ Fehler im Bot:', err.message);
+    console.error('❌ Fehler im Antwortteil:', err.message);
     res.send('<Response><Say>Entschuldigung, es gab ein technisches Problem.</Say></Response>');
   }
 });
 
-// ➤ Server starten
 app.listen(PORT, () => {
-  console.log(`✅ Lisa Voicebot läuft auf Port ${PORT}`);
+  console.log(`✅ Lisa Voicebot (statisch) läuft auf Port ${PORT}`);
 });
