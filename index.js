@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const { create } = require('xmlbuilder2');
+const FormData = require('form-data');
 require('dotenv').config();
 
 const app = express();
@@ -22,7 +23,7 @@ const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel (ElevenLabs)
 // ➤ Einstieg: Intro über ElevenLabs
 app.post('/voice', async (req, res) => {
   try {
-    const introText = 'Guten Tag! Mein Name ist Lisa und ich melde mich im Namen von DOPS conTRUSTing aus Kindberg – wir bieten innovative Bildschirmwerbung an stark frequentierten Orten hier bei uns in der Region. Schon ab wenigen Euro im Monat ist Ihr Unternehmen sichtbar – digital, auffällig und lokal. Gerne vereinbaren wir einen Termin, bei dem Ihen unser Eigentümer Christian Doppelhofer alles persönlich zeigt.';
+    const introText = 'Grüß Gott, hier ist Lisa von DOPS conTRUSTing aus Kindberg. Ich hätte nur eine kurze Frage zur regionalen Werbung.';
 
     const elevenResp = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -72,33 +73,55 @@ app.post('/voice', async (req, res) => {
   }
 });
 
-// ➤ GPT-generierte Antwort
+// ➤ Verarbeite echte Audioaufnahme mit Whisper → GPT → ElevenLabs
 app.post('/process-recording', async (req, res) => {
   try {
-    const userInput = 'Ein Beispielkunde hat Interesse an Werbung.'; // später via Transkript ersetzen
+    const recordingUrl = req.body.RecordingUrl + '.mp3';
+    const tempFile = path.join(audioDir, `user-${Date.now()}.mp3`);
 
+    // 🧲 Lade Audio herunter
+    const audioResp = await axios.get(recordingUrl, { responseType: 'arraybuffer' });
+    fs.writeFileSync(tempFile, audioResp.data);
+
+    // 🔎 Whisper Speech-to-Text
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(tempFile));
+    formData.append('model', 'whisper-1');
+
+    const whisperResp = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+      headers: {
+        ...formData.getHeaders(),
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      }
+    });
+
+    const userText = whisperResp.data.text;
+    console.log('🗣️ Nutzer sagte:', userText);
+
+    // 🤖 GPT-Antwort generieren
     const gptResp = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
-          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin für regionale Bildschirmwerbung aus der Steiermark. Sprich locker, direkt und sympathisch.'
+          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin für regionale Bildschirmwerbung aus der Steiermark. Sprich locker, charmant, aber fokussiert auf einen Vor-Ort-Termin.'
         },
         {
           role: 'user',
-          content: userInput
+          content: userText
         }
       ]
     }, {
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/json'
       }
     });
 
     const gptReply = gptResp.data.choices[0].message.content;
-    console.log('🤖 GPT sagt:', gptReply);
+    console.log('🤖 GPT antwortet:', gptReply);
 
+    // 🔊 Antwort über ElevenLabs erzeugen
     const elevenResp = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
@@ -119,11 +142,11 @@ app.post('/process-recording', async (req, res) => {
       }
     );
 
-    const fileName = `reply-${Date.now()}.mp3`;
-    const filePath = path.join(audioDir, fileName);
-    fs.writeFileSync(filePath, elevenResp.data);
+    const replyFile = `reply-${Date.now()}.mp3`;
+    const replyPath = path.join(audioDir, replyFile);
+    fs.writeFileSync(replyPath, elevenResp.data);
 
-    const audioUrl = `${process.env.BASE_URL}/audio/${fileName}`;
+    const audioUrl = `${process.env.BASE_URL}/audio/${replyFile}`;
 
     const twiml = create({
       Response: {
@@ -135,11 +158,11 @@ app.post('/process-recording', async (req, res) => {
     res.send(twiml);
 
   } catch (err) {
-    console.error('❌ Fehler im GPT-Teil:', err.message);
-    res.send('<Response><Say>Es gab ein Problem mit der Antwort.</Say></Response>');
+    console.error('❌ Fehler bei Sprachantwort:', err.message);
+    res.send('<Response><Say>Technischer Fehler bei der Antwort.</Say></Response>');
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Lisa Voicebot mit GPT läuft auf http://localhost:${PORT}`);
+  console.log(`✅ Lisa Voicebot mit Whisper läuft auf http://localhost:${PORT}`);
 });
