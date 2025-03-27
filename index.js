@@ -6,6 +6,12 @@ const path = require('path');
 const { create } = require('xmlbuilder2');
 require('dotenv').config();
 
+// 💡 Ordner audio sicherstellen:
+const audioDir = path.join(__dirname, 'audio');
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir);
+}
+
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
