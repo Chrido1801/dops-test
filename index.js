@@ -41,10 +41,12 @@ app.post('/voice', async (req, res) => {
       }
     });
 
+    const introUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
+ 
     if (!introUrl) {
   throw new Error('Kein gültiger Link von file.io erhalten');
 }
-    const introUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
+    console.log("🎧 Intro MP3 Link:", introUrl);
 
     const response = create({
       Response: {
