@@ -41,7 +41,10 @@ app.post('/voice', async (req, res) => {
       }
     });
 
-    const introUrl = fileUpload.data.link;
+    if (!introUrl) {
+  throw new Error('Kein gültiger Link von file.io erhalten');
+}
+    const introUrl = fileUpload.data.success && fileUpload.data.link ? fileUpload.data.link : null;
 
     const response = create({
       Response: {
@@ -131,6 +134,7 @@ app.post('/process-recording', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Fehler im Bot:', err.message);
+    console.log('file.io Upload Response:', fileUpload.data);
     res.send('<Response><Say>Entschuldigung, es gab ein technisches Problem.</Say></Response>');
   }
 });
