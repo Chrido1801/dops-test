@@ -1,3 +1,6 @@
+
+// Deepgram Debug-Version
+
 const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
@@ -27,10 +30,7 @@ app.post('/voice', async (req, res) => {
       {
         text: introText,
         model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.9
-        }
+        voice_settings: { stability: 0.4, similarity_boost: 0.9 }
       },
       {
         headers: {
@@ -78,89 +78,42 @@ app.post('/process-recording', async (req, res) => {
     console.log('🎙️ Lade Aufnahme herunter:', recordingUrl);
     const audioResp = await axios.get(recordingUrl, { responseType: 'arraybuffer' });
     fs.writeFileSync(tempFile, audioResp.data);
-
-    console.log('✅ Gespeichert:', tempFile);
-
     const audioData = fs.readFileSync(tempFile);
 
-    const deepgramResp = await axios.post(
-      'https://api.deepgram.com/v1/listen',
-      audioData,
-      {
-        headers: {
-          'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/mp3'
-        }
-      }
-    );
+    console.log('🧪 Sende an Deepgram...');
 
-    const userText = deepgramResp.data.results.channels[0].alternatives[0].transcript;
-    console.log('🗣️ Nutzer sagte (Deepgram):', userText);
-
-    const gptResp = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-3.5-turbo',
-      messages: [
+    try {
+      const deepgramResp = await axios.post(
+        'https://api.deepgram.com/v1/listen',
+        audioData,
         {
-          role: 'system',
-          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin aus der Steiermark. Antworte charmant und zielgerichtet auf regionale Werbefragen und leite sanft zu einem Vor-Ort-Termin über.'
-        },
-        {
-          role: 'user',
-          content: userText
+          headers: {
+            'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
+            'Content-Type': 'audio/mp3'
+          }
         }
-      ]
-    }, {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+      );
+
+      const userText = deepgramResp.data.results.channels[0].alternatives[0].transcript;
+      console.log('🗣️ Deepgram Transkript:', userText);
+    } catch (deepgramErr) {
+      if (deepgramErr.response) {
+        console.error('❌ Deepgram Fehler:', deepgramErr.response.status);
+        console.error('🧾 Deepgram Antwort:', JSON.stringify(deepgramErr.response.data, null, 2));
+      } else {
+        console.error('❌ Deepgram Verbindung fehlgeschlagen:', deepgramErr.message);
       }
-    });
+      res.send('<Response><Say>Deepgram-Fehler aufgetreten.</Say></Response>');
+      return;
+    }
 
-    const gptReply = gptResp.data.choices[0].message.content;
-    console.log('🤖 GPT antwortet:', gptReply);
-
-    const elevenResp = await axios.post(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        text: gptReply,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.9
-        }
-      },
-      {
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg'
-        },
-        responseType: 'arraybuffer'
-      }
-    );
-
-    const replyFile = `reply-${Date.now()}.mp3`;
-    const replyPath = path.join(audioDir, replyFile);
-    fs.writeFileSync(replyPath, elevenResp.data);
-
-    const audioUrl = `${process.env.BASE_URL}/audio/${replyFile}`;
-    console.log('🔊 Antwort MP3:', audioUrl);
-
-    const twiml = create({
-      Response: {
-        Play: audioUrl
-      }
-    }).end({ prettyPrint: true });
-
-    res.type('text/xml');
-    res.send(twiml);
-
+    res.send('<Response><Say>Test abgeschlossen. Deepgram-Debug aktiv.</Say></Response>');
   } catch (err) {
-    console.error('❌ Fehler bei Sprachantwort:', err.message);
-    res.send('<Response><Say>Technischer Fehler bei der Antwort.</Say></Response>');
+    console.error('❌ Fehler bei Debug-Test:', err.message);
+    res.send('<Response><Say>Technischer Fehler im Debug-Modus.</Say></Response>');
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Lisa Voicebot (Deepgram Edition) läuft auf Port ${PORT}`);
+  console.log(`🛠️ Lisa Voicebot (Deepgram Debug) läuft auf Port ${PORT}`);
 });
