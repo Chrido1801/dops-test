@@ -4,13 +4,11 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const { create } = require('xmlbuilder2');
-const FormData = require('form-data');
 require('dotenv').config();
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// 💡 Ordner audio sicherstellen
 const audioDir = path.join(__dirname, 'audio');
 if (!fs.existsSync(audioDir)) {
   fs.mkdirSync(audioDir);
@@ -18,9 +16,8 @@ if (!fs.existsSync(audioDir)) {
 app.use('/audio', express.static(audioDir));
 
 const PORT = process.env.PORT || 3000;
-const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel (ElevenLabs)
+const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 
-// ➤ Einstieg: Intro über ElevenLabs
 app.post('/voice', async (req, res) => {
   try {
     const introText = 'Grüß Gott, hier ist Lisa von DOPS conTRUSTing aus Kindberg. Ich hätte nur eine kurze Frage zur regionalen Werbung.';
@@ -50,7 +47,7 @@ app.post('/voice', async (req, res) => {
     fs.writeFileSync(filePath, elevenResp.data);
 
     const fileUrl = `${process.env.BASE_URL}/audio/${fileName}`;
-    console.log('🎧 Intro lokal gespeichert:', fileUrl);
+    console.log('🎧 Intro gespeichert:', fileUrl);
 
     const response = create({
       Response: {
@@ -59,7 +56,7 @@ app.post('/voice', async (req, res) => {
           '@timeout': 5,
           '@maxLength': 10,
           '@action': `${process.env.BASE_URL}/process-recording`,
-          '@playBeep': true
+          '@playBeep': false
         }
       }
     }).end({ prettyPrint: true });
@@ -73,38 +70,39 @@ app.post('/voice', async (req, res) => {
   }
 });
 
-// ➤ Verarbeite echte Audioaufnahme mit Whisper → GPT → ElevenLabs
 app.post('/process-recording', async (req, res) => {
   try {
     const recordingUrl = req.body.RecordingUrl + '.mp3';
     const tempFile = path.join(audioDir, `user-${Date.now()}.mp3`);
 
-    // 🧲 Lade Audio herunter
+    console.log('🎙️ Lade Aufnahme herunter:', recordingUrl);
     const audioResp = await axios.get(recordingUrl, { responseType: 'arraybuffer' });
     fs.writeFileSync(tempFile, audioResp.data);
 
-    // 🔎 Whisper Speech-to-Text
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream(tempFile));
-    formData.append('model', 'whisper-1');
+    console.log('✅ Gespeichert:', tempFile);
 
-    const whisperResp = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-      headers: {
-        ...formData.getHeaders(),
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+    const audioData = fs.readFileSync(tempFile);
+
+    const deepgramResp = await axios.post(
+      'https://api.deepgram.com/v1/listen',
+      audioData,
+      {
+        headers: {
+          'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
+          'Content-Type': 'audio/mp3'
+        }
       }
-    });
+    );
 
-    const userText = whisperResp.data.text;
-    console.log('🗣️ Nutzer sagte:', userText);
+    const userText = deepgramResp.data.results.channels[0].alternatives[0].transcript;
+    console.log('🗣️ Nutzer sagte (Deepgram):', userText);
 
-    // 🤖 GPT-Antwort generieren
     const gptResp = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
-          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin für regionale Bildschirmwerbung aus der Steiermark. Sprich locker, charmant, aber fokussiert auf einen Vor-Ort-Termin.'
+          content: 'Du bist Lisa, eine sympathische Verkaufsberaterin aus der Steiermark. Antworte charmant und zielgerichtet auf regionale Werbefragen und leite sanft zu einem Vor-Ort-Termin über.'
         },
         {
           role: 'user',
@@ -121,7 +119,6 @@ app.post('/process-recording', async (req, res) => {
     const gptReply = gptResp.data.choices[0].message.content;
     console.log('🤖 GPT antwortet:', gptReply);
 
-    // 🔊 Antwort über ElevenLabs erzeugen
     const elevenResp = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
@@ -147,6 +144,7 @@ app.post('/process-recording', async (req, res) => {
     fs.writeFileSync(replyPath, elevenResp.data);
 
     const audioUrl = `${process.env.BASE_URL}/audio/${replyFile}`;
+    console.log('🔊 Antwort MP3:', audioUrl);
 
     const twiml = create({
       Response: {
@@ -164,5 +162,5 @@ app.post('/process-recording', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Lisa Voicebot mit Whisper läuft auf http://localhost:${PORT}`);
+  console.log(`✅ Lisa Voicebot (Deepgram Edition) läuft auf Port ${PORT}`);
 });
